@@ -37,24 +37,31 @@ class DPPrompt():
     model = None
     device = None
 
-    def __init__(self, model_checkpoint="google/flan-t5-base", min_logit=-19.22705113016047, max_logit=7.48324937989716, batch_size=16):
+    def __init__(self, model_checkpoint="google/flan-t5-base", min_logit=-19.22705113016047, max_logit=7.48324937989716, batch_size=16, LLM=False):
         self.model_checkpoint = model_checkpoint
 
         self.device = "cuda" if torch.cuda.is_available() else "cpu"
         self.batch_size = batch_size
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_checkpoint)
-        self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_checkpoint).to(self.device)
+        if LLM == True:
+            self.model = AutoModelForCausalLM.from_pretrained(self.model_checkpoint, device_map="cuda")
+        else:
+            self.model = AutoModelForSeq2SeqLM.from_pretrained(self.model_checkpoint).to(self.device)
 
         self.min_logit = min_logit
         self.max_logit = max_logit
         self.sensitivity = abs(self.max_logit - self.min_logit)
         self.logits_processor = LogitsProcessorList([ClipLogitsProcessor(self.min_logit, self.max_logit)])
 
-        self.pipe = pipeline("text2text-generation", model=self.model, tokenizer=self.tokenizer, device=self.device, truncation=True)
+        if LLM == True:
+            self.pipe = pipeline("text2text-generation", model=self.model, tokenizer=self.tokenizer, truncation=True)
+        else:
+            self.pipe = pipeline("text2text-generation", model=self.model, tokenizer=self.tokenizer, device=self.device, truncation=True)
+        self.pipe.tokenizer.pad_token_id = self.model.config.eos_token_id
 
     def prompt_template_fn(self, doc):
-        prompt = "Document : {}\nParaphrase of the document :".format(doc)
+        prompt = "Document: {}\nShort paraphrase of the document : ".format(doc)
         return prompt
     
     def privatize_dp(self, texts, epsilon=100):
